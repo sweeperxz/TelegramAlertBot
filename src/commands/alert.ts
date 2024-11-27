@@ -48,7 +48,7 @@ const startStatusCheck = (ctx: Context) => {
         } catch (error) {
             console.error("Ошибка при вызове updateStatus:", error);
         }
-    }, 15000); 
+    }, 60000); 
 };
 
 const alert = () => async (ctx: Context) => {
