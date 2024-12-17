@@ -1,33 +1,36 @@
 import { Telegraf } from 'telegraf';
-
-import { greeting } from './text';
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { development, production } from './core';
-import {alert, startStatusCheck} from "./commands/alert";
-import {debug} from "debug";
+import { production } from './core';
+import { alert, startStatusCheck } from './commands/alert';
+import createDebug from 'debug';
+
+const debug = createDebug('bot:index');
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
 
 const bot = new Telegraf(BOT_TOKEN);
 
-// Стартуем автоматическую проверку статуса после запуска бота
-bot.launch().then(() => {
-    debug("Бот запущен и будет автоматически обновлять статус Полтавской области.");
-    // Используем один из обработчиков, чтобы передать ctx в startStatusCheck
-    bot.on('message', (ctx) => {
-        startStatusCheck(ctx);  // Передаем контекст в функцию
-    });
+// Логируем запуск бота в Vercel
+console.log("Бот запущен...");
+
+bot.command('start', async (ctx) => {
+    debug("Запуск проверки статуса...");
+    startStatusCheck(ctx); // Передаем ctx для работы
+    await ctx.reply("🚀 Бот запущен и начнёт проверять статус тревоги!");
 });
+
+// Обработка команды alert
 bot.command('alert', alert());
-bot.on('message', greeting());
 
+// Запуск бота в продакшн или разработке
+if (ENVIRONMENT !== 'production') {
+    bot.launch().then(() => {
+        console.log('Бот запущен в режиме разработки.');
+    });
+}
 
-
-//prod mode (Vercel)
+// prod mode (Vercel)
 export const startVercel = async (req: VercelRequest, res: VercelResponse) => {
-    await production(req, res, bot);
+    await production(req, res, bot); // Передаем bot для использования в продакшн
 };
-
-// dev mode
-ENVIRONMENT !== 'production' && development(bot);
