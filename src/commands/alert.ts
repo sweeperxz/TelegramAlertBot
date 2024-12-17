@@ -6,49 +6,48 @@ const debug = createDebug('bot:alert_command');
 const CHANNEL_ID = process.env.CHANNEL_ID || ''; // Убедитесь, что этот ID корректный
 
 let cachedStatus: string | null = null; // Переменная для хранения предыдущего статуса
+const MAX_RETRIES = 3; // Количество попыток при ошибке запроса
 
 // Функция для получения состояния тревоги
-const fetchPoltavaStatus = async (): Promise<string> => {
+const fetchPoltavaStatus = async (retries = 0): Promise<string> => {
     try {
-        const { data } = await axios.get("https://ubilling.net.ua/aerialalerts/");
-        const poltava = data.states["Полтавська область"];
+        const { data } = await axios.get("https://ubilling.net.ua/aerialalerts/", { timeout: 5000 });
+        const poltava = data.states?.["Полтавська область"];
+
+        if (!poltava) throw new Error("Не найдены данные о Полтавской области");
+
         return poltava.alertnow
-            ? "🔔УВАГА! ПОЛТАВСЬКА ОБЛАСТЬ - ПОВІТРЯНА ТРИВОГА! РАКЕТНА НЕБЕЗПЕКА!"
-            : "🔕УВАГА! ПОЛТАВСЬКА ОБЛАСТЬ - ВІДБІЙ ПОВІТРЯНОЇ ТРИВОГИ ЗА ВСІМА НАПРЯМКАМИ!";
+            ? "🔔 УВАГА! ПОЛТАВСЬКА ОБЛАСТЬ - ПОВІТРЯНА ТРИВОГА!"
+            : "🔕 ВІДБІЙ ПОВІТРЯНОЇ ТРИВОГИ!";
     } catch (error: any) {
+        if (retries < MAX_RETRIES) {
+            debug(`Ошибка запроса, повторная попытка (${retries + 1}): ${error.message}`);
+            return fetchPoltavaStatus(retries + 1);
+        }
         console.error("Ошибка при запросе данных:", error.message);
-        return "Не удалось получить данные о статусе.";
+        return "❗ Не удалось получить данные о статусе. Попробуйте позже.";
     }
 };
+
 
 
 const updateStatus = async (ctx: Context) => {
-    try {
-        const statusMessage = await fetchPoltavaStatus();
-        if (statusMessage !== cachedStatus) { 
-            cachedStatus = statusMessage;
-            debug(`Статус изменился. Отправка нового сообщения: ${statusMessage}`);
-            await ctx.telegram.sendMessage(CHANNEL_ID, statusMessage); 
-        } else {
-            debug("Статус не изменился, не отправляю сообщение.");
-        }
-    } catch (error: any) {
-        console.error("Ошибка при обновлении статуса:", error.message);
-        await ctx.reply('Произошла ошибка при обновлении статуса.');
+    const statusMessage = await fetchPoltavaStatus();
+
+    if (statusMessage !== cachedStatus) {
+        cachedStatus = statusMessage;
+        debug(`Статус изменился: ${statusMessage}`);
+        await ctx.telegram.sendMessage(CHANNEL_ID, statusMessage);
+    } else {
+        debug("Статус не изменился, сообщение не отправлено.");
     }
 };
-
 const startStatusCheck = (ctx: Context) => {
-    debug("Запуск проверки статуса...");
+    debug("Запуск автоматической проверки статуса...");
 
     setInterval(async () => {
-        try {
-            debug("Проверка статуса...");
-            await updateStatus(ctx); 
-        } catch (error) {
-            console.error("Ошибка при вызове updateStatus:", error);
-        }
-    }, 60000); 
+        await updateStatus(ctx);
+    }, 20); // Проверка каждые 60 секунд
 };
 
 const alert = () => async (ctx: Context) => {

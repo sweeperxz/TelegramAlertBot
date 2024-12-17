@@ -12,13 +12,13 @@ const ENVIRONMENT = process.env.NODE_ENV || '';
 const bot = new Telegraf(BOT_TOKEN);
 
 // Стартуем автоматическую проверку статуса после запуска бота
-bot.hears('/start', (ctx) => {  // Слушаем команду или текст "start"
+bot.launch().then(() => {
     debug("Бот запущен и будет автоматически обновлять статус Полтавской области.");
-    startStatusCheck(ctx); 
-    debug('Бот запущен и будет автоматически обновлять статус Полтавской области.');
+    // Используем один из обработчиков, чтобы передать ctx в startStatusCheck
+    bot.on('message', (ctx) => {
+        startStatusCheck(ctx);  // Передаем контекст в функцию
+    });
 });
-
-// Команды
 bot.command('alert', alert());
 bot.on('message', greeting());
 
@@ -31,4 +31,3 @@ export const startVercel = async (req: VercelRequest, res: VercelResponse) => {
 
 // dev mode
 ENVIRONMENT !== 'production' && development(bot);
-
